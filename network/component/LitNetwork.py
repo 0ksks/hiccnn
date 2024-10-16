@@ -10,14 +10,24 @@ class LitModel(pl.LightningModule):
     def __init__(
             self,
             model: nn.Module,
+            optimizer: type,
+            lr_scheduler: type,
+            optimizer_params: dict,
+            lr_scheduler_params: dict,
+            lightning_scheduler_params: dict,
             save_pth: int,
             save_pth_path: str,
             save_pth_name: str,
+            classification_loss_patience: int,
+            accuracy_threshold: float,
             cluster_interval: int = 1,
             log_tmp_output_every_step: int = None,
             log_tmp_output_every_epoch: int = None,
             example_input: torch.Tensor = None
     ):
+        """
+        optimizer_params: `classification_lr` `cluster_lr`
+        """
         super().__init__()
         #  save params
         self.model = model.to(self.device)
@@ -28,6 +38,20 @@ class LitModel(pl.LightningModule):
         self.save_pth = save_pth
         self.save_pth_path = save_pth_path
         self.save_pth_name = save_pth_name
+        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
+        self.optimizer_params = optimizer_params
+        self.lr_scheduler_params = lr_scheduler_params
+        self.lightning_scheduler_params = lightning_scheduler_params
+
+        #  save accuracy
+        self.current_accuracy = torch.tensor(0.0)
+
+        #  config classification
+        self.classification_loss_patience = classification_loss_patience
+        self.classification_loss_counter = 0
+        self.accuracy_threshold = accuracy_threshold
+        self.start_cluster = False
 
         #  store outputs intercepted by hooks
         self.intercept_output: dict[str, torch.Tensor] = {}
@@ -48,6 +72,7 @@ class LitModel(pl.LightningModule):
         outputs = self.model(inputs)
         self.log_lock = False
         log_dict = self.training_step_loss_fn(inputs, outputs, labels)
+        log_dict.update({"learning_rate": self.optimizer.param_groups[0]["lr"]})
 
         train_loss = log_dict["train_loss"]
 
@@ -72,15 +97,36 @@ class LitModel(pl.LightningModule):
                 samples = labels.size(0)
                 correct_sum += correct.item()
                 samples_sum += samples
-        self.logger.experiment.log({"accuracy": correct_sum / samples_sum})
+        accuracy = correct_sum / samples_sum
+        self.current_accuracy = accuracy
+        self.logger.experiment.log({"accuracy": accuracy})
+        #  update counter
+        if self.current_accuracy < self.accuracy_threshold:
+            self.classification_loss_counter = 0
+        else:
+            self.classification_loss_counter += 1
+        self.start_cluster = self.classification_loss_counter > self.classification_loss_patience
         #  intermittently log feature maps
         if self.log_tmp_output_every_epoch and self.current_epoch % self.log_tmp_output_every_epoch == 0:
             self.log_tmp_output()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-6)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=125, gamma=0.6)
-        return [optimizer], [{"scheduler": scheduler, "interval": "epoch", "frequency": 1}]
+        optimizer_params = self.optimizer_params
+        classification_lr = optimizer_params.pop("classification_lr")
+        cluster_lr = optimizer_params.pop("cluster_lr")
+        if self.start_cluster:
+            optimizer_params["lr"] = cluster_lr
+        else:
+            optimizer_params["lr"] = classification_lr
+        self.optimizer = self.optimizer(self.model.parameters(), **optimizer_params)
+        self.lr_scheduler = self.lr_scheduler(self.optimizer, **self.lr_scheduler_params)
+        self.lightning_scheduler_params = self.lightning_scheduler_params
+        self.lightning_scheduler_params.update({'scheduler': self.lr_scheduler})
+
+        if self.start_cluster:
+            return [self.optimizer], [self.lightning_scheduler_params]
+        else:
+            return [self.optimizer]
 
     @abstractmethod
     def conv_2d_filter(self, name: str, layer: nn.Module) -> tuple[bool, str]:

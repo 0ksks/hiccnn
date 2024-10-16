@@ -17,6 +17,10 @@ dataset:
     - CUB_200_2011
   voc_2010_crop:
     - voc2010_crop
+  mpii_human_pose:
+    - mpii_human_pose
+  human_interaction_image:
+    - human_interaction_image
 
 weight:
   root:

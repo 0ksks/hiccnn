@@ -21,7 +21,12 @@ from global_variable import EPSILON
 class VGG16BN(LitModel):
     def __init__(
             self,
-            model,
+            model: nn.Module,
+            optimizer: type,
+            lr_scheduler: type,
+            optimizer_params: dict,
+            lr_scheduler_params: dict,
+            lightning_scheduler_params: dict,
             center_num: int,
             num_classes: int,
             example_input: torch.Tensor,
@@ -29,6 +34,8 @@ class VGG16BN(LitModel):
             save_pth_path: str,
             save_pth_name: str,
             train_dataloader: torch.utils.data.DataLoader,
+            classification_loss_patience: int,
+            accuracy_threshold: float,
             cluster_class,
             cluster_interval=1,
             cluster_loss_factor=0.1,
@@ -46,10 +53,17 @@ class VGG16BN(LitModel):
                 out_features=num_classes
             )
         super(VGG16BN, self).__init__(
-            model, save_pth, save_pth_path, save_pth_name, cluster_interval,
+            model,
+            optimizer, lr_scheduler,
+            optimizer_params, lr_scheduler_params, lightning_scheduler_params,
+            save_pth, save_pth_path, save_pth_name,
+            classification_loss_patience, accuracy_threshold,
+            cluster_interval,
             log_tmp_output_every_step, log_tmp_output_every_epoch,
             example_input
         )
+
+        #  config classification
 
         #  config cluster
         self.SMG_block = None
@@ -212,37 +226,34 @@ class VGG16BN(LitModel):
         else:
             cluster_loss = -torch.sum(intra_similarity / (inter_similarity + EPSILON))
 
-        return cluster_loss, torch.sum(intra_similarity) / batch, torch.sum(inter_similarity) / batch
+        return cluster_loss
 
     def training_step_loss_fn(
             self, inputs: torch.Tensor, outputs: torch.Tensor, labels: torch.Tensor
     ) -> dict[str, torch.Tensor]:
         classification_loss = F.cross_entropy(outputs, labels)
         loss_log = {}
-        if self.cluster_stop_epoch == 0 or self.current_epoch < self.cluster_stop_epoch:
-            cluster_loss, intra_similarity, inter_similarity = (
-                self.cluster_loss_fn(
-                    self.intercept_output["5.3"],
-                    labels
-                )
-            )
-            loss_log.update({
-                "cluster_loss": cluster_loss,
-                "intra_similarity": intra_similarity,
-                "inter_similarity": inter_similarity,
-            })
-            self.last_cluster_loss = cluster_loss
-        else:
-            cluster_loss = self.last_cluster_loss
 
         # hierarchical_loss = self.hierarchical_loss_fn(self.intercept_output["4.3"], self.intercept_output["5.3"])
         hierarchical_loss = torch.tensor(0).to(dtype=torch.float, device=self.device)
 
-        total_loss = (
-                self.cluster_loss_factor * cluster_loss
-                + self.hierarchical_loss_factor * hierarchical_loss
-                + classification_loss
-        )
+        if self.start_cluster:
+            if self.cluster_stop_epoch == 0 or self.current_epoch < self.cluster_stop_epoch:
+                cluster_loss = self.cluster_loss_fn(
+                    self.intercept_output["5.3"],
+                    labels
+                )
+                loss_log.update({"cluster_loss": cluster_loss})
+                self.last_cluster_loss = cluster_loss
+            else:
+                cluster_loss = self.last_cluster_loss
+            total_loss = (
+                    self.cluster_loss_factor * cluster_loss
+                    + self.hierarchical_loss_factor * hierarchical_loss
+                    + classification_loss
+            )
+        else:
+            total_loss = classification_loss
 
         loss_log.update({
             "train_loss": total_loss,
