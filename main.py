@@ -20,9 +20,11 @@ def objective(config, datasets, wandb_log_dir, run_name):
     elif optimizer == "sgd":
         optimizer = torch.optim.SGD
     train_vgg_16_bn(
+        #  ========================= network =========================
         model=model,
         num_classes=2,
         overwrite_classifier=True,
+        #  ========================= optimization =========================
         optimizer=optimizer,
         lr_scheduler=torch.optim.lr_scheduler.StepLR,
         optimizer_params={
@@ -36,23 +38,28 @@ def objective(config, datasets, wandb_log_dir, run_name):
             "interval": "epoch",
             "frequency": 1,
         },
+        #  ========================= dataset =========================
         datasets=datasets,
         subset_size=8,
-        batch_size=config.batch_size,
+        batch_size=4,
         num_workers=0,
+        #  ========================= loss =========================
         center_num=5,
+        classification_loss_patience=10,
+        accuracy_threshold=0.9,
         cluster_interval=1,
         cluster_loss_factor=1e-1,
         cluster_stop_epoch=0,
         hierarchical_loss_factor=1e-3,
-        log_tmp_output_every_step=0,
-        log_tmp_output_every_epoch=10,
-        save_feature_map=0,
-        save_pth=1,
-        save_pth_path="",
-        save_pth_name="",
         max_epochs=epochs,
         callbacks=None,
+        #  ========================= log =========================
+        log_tmp_output_every_step=0,
+        log_tmp_output_every_epoch=0,
+        save_feature_map=0,
+        save_pth=0,
+        save_pth_path="",
+        save_pth_name="",
         wandb_log_dir=wandb_log_dir,
         run_name=run_name
     )

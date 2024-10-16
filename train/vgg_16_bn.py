@@ -105,7 +105,6 @@ def train_vgg_16_bn(
         log_tmp_output_every_epoch = None
 
     example_input, _ = datasets[1][0]
-    example_input, _ = datasets[0][0]
     if cluster_stop_epoch == 0:
         cluster_stop_epoch = max_epochs
 

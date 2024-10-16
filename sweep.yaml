@@ -3,8 +3,6 @@ metric:
   name: train_loss  # 需要优化的指标
   goal: minimize  # 最小化 val_loss
 parameters:
-  batch_size:
-    value: 4
   learning_rate:
     distribution: uniform
     min: 0.0001
