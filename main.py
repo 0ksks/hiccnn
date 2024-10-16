@@ -12,8 +12,6 @@ filterwarnings("ignore")
 
 
 def objective(config, datasets, wandb_log_dir, run_name):
-    lr = config.learning_rate
-    epochs = config.epochs
     optimizer = config.optimizer
     if optimizer == "adam":
         optimizer = torch.optim.Adam
@@ -28,10 +26,11 @@ def objective(config, datasets, wandb_log_dir, run_name):
         optimizer=optimizer,
         lr_scheduler=torch.optim.lr_scheduler.StepLR,
         optimizer_params={
-            "lr": lr
+            "classification_lr": config.classification_lr,
+            "cluster_lr": config.cluster_lr,
         },
         lr_scheduler_params={
-            "step_size": epochs,
+            "step_size": config.epochs,
             "gamma": 0.6,
         },
         lightning_scheduler_params={
@@ -51,7 +50,7 @@ def objective(config, datasets, wandb_log_dir, run_name):
         cluster_loss_factor=1e-1,
         cluster_stop_epoch=0,
         hierarchical_loss_factor=1e-3,
-        max_epochs=epochs,
+        max_epochs=config.epochs,
         callbacks=None,
         #  ========================= log =========================
         log_tmp_output_every_step=0,

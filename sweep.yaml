@@ -3,10 +3,12 @@ metric:
   name: train_loss  # 需要优化的指标
   goal: minimize  # 最小化 val_loss
 parameters:
-  learning_rate:
+  classification_lr:
     distribution: uniform
     min: 0.0001
     max: 0.01
+  cluster_lr:
+    value: 0.0001
   epochs:
     value: 100
   optimizer:
