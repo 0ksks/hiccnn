@@ -182,7 +182,7 @@ def objective(config, datasets, wandb_log_dir, run_name):
 
 if __name__ == "__main__":
     from train.vgg_16_bn import load_vgg_16_bn, train_vgg_16_bn
-    from train import load_datasets
+    from train_file import load_datasets
     import yaml
 
     with open("sweep.yaml", encoding="utf-8") as file:
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     if not os.path.exists(wandb_log_dir):
         os.makedirs(wandb_log_dir)
     model = load_vgg_16_bn(weight_path="vgg_16_bn", num_classes=2)
-    datasets = load_datasets("cub_200_2011")
+    datasets = load_datasets("voc_2010_crop")
 
 
     def main():

@@ -70,7 +70,7 @@ if __name__ == '__main__':
     if not os.path.exists(wandb_log_dir):
         os.makedirs(wandb_log_dir)
     model = load_vgg_16_bn(weight_path="model_2499", num_classes=2)
-    datasets = load_datasets("cub_200_2011")
+    datasets = load_datasets("voc_2010_crop")
     wandb.login(key=get_config_value("wandb.api_key"))
     wandb.init(
         name=RUN_NAME,
