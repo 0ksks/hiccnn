@@ -18,7 +18,12 @@ dataset:
   voc_2010_crop:
     - voc2010_crop
   mpii_human_pose:
-    - mpii_human_pose
+    cut:
+      - mpii_export
+      - cut
+    ori:
+      - mpii_export
+      - ori
   human_interaction_image:
     - human_interaction_image
 

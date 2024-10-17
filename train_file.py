@@ -23,10 +23,9 @@ os.environ["OMP_NUM_THREADS"] = "2"
 filterwarnings("ignore")
 
 
-def load_datasets(dataset_name: Literal["cub_200_2011", "voc_2010_crop", "mpii_human_pose", "human_interaction_image"]):
-    """
-    mpii_human_pose only supports train set
-    """
+def load_datasets(dataset_name: Literal[
+    "cub_200_2011", "voc_2010_crop", "mpii_human_pose.cut", "mpii_human_pose.ori", "human_interaction_image"],
+                  **kwargs):
     dataset_path = parse_config_path(
         get_config_value("dataset.root") +
         get_config_value(f"dataset.{dataset_name}")
@@ -37,45 +36,40 @@ def load_datasets(dataset_name: Literal["cub_200_2011", "voc_2010_crop", "mpii_h
         for idx, dataset in enumerate(datasets):
             datasets[idx] = single_category_cub_dataset(dataset)
     elif dataset_name == "voc_2010_crop":
-        datasets = get_voc_dataset(dataset_path, "bird")
-    elif dataset_name == "mpii_human_pose":
-        datasets = get_mpii_dataset(dataset_path, label="category", single=True)
+        datasets = get_voc_dataset(dataset_path, dataset_name="bird", **kwargs)
+    elif "mpii_human_pose" in dataset_name:
+        datasets = get_mpii_dataset(dataset_path, **kwargs)
+        for idx, dataset in enumerate(datasets):
+            datasets[idx] = single_category_mpii_dataset(dataset)
     elif dataset_name == "human_interaction_image":
         datasets = get_hii_dataset(dataset_path)
     else:
         raise Exception("dataset not supported")
-    if dataset_name == "mpii_human_pose":
-        print(f"dataset `{dataset_name}` loaded, train length: {len(datasets[0])}")
-    else:
-        print(f"dataset `{dataset_name}` loaded, train length: {len(datasets[0])}, test length: {len(datasets[1])}")
+    train_len = len(datasets[0])
+    test_len = 0 if len(datasets) == 1 else len(datasets[1])
+    print(f"dataset `{dataset_name}` loaded, train length: {train_len}, test length: {test_len}")
 
     return datasets
 
 
 if __name__ == '__main__':
-    WANDB_ONLINE = 0
     OPTIMIZER = torch.optim.Adam
     CLASSIFICATION_LR = 1e-4
     CLUSTER_LR = 1e-6
     EPOCHS = 100
-    BATCH_SIZE = 5
+    BATCH_SIZE = 16
 
     from train.vgg_16_bn import load_vgg_16_bn, train_vgg_16_bn
 
-    if WANDB_ONLINE == 1:
-        mode = "offline"
-    else:
-        mode = "online"
     wandb_log_dir = parse_config_path(get_config_value("wandb.root"))
     if not os.path.exists(wandb_log_dir):
         os.makedirs(wandb_log_dir)
-    model = load_vgg_16_bn(weight_path="model_2499", num_classes=2)
+    model = load_vgg_16_bn(weight_path="vgg_16_bn", num_classes=2)
     datasets = load_datasets("voc_2010_crop")
-    wandb.login(key=get_config_value("wandb.api_key"))
+    wandb.login(key=get_config_value("wandb.api_key"), force=True)
     wandb.init(
         name=RUN_NAME,
-        dir=wandb_log_dir,
-        mode=mode,
+        dir=wandb_log_dir
     )
     train_vgg_16_bn(
         model=model,
@@ -96,14 +90,14 @@ if __name__ == '__main__':
             "frequency": 1,
         },
         datasets=datasets,
-        subset_size=10,
+        subset_size=32,
         batch_size=BATCH_SIZE,
         num_workers=0,
         center_num=5,
-        classification_loss_patience=10,
+        classification_loss_patience=-1,
         accuracy_threshold=0.8,
         cluster_interval=1,
-        cluster_loss_factor=1e-1,
+        cluster_loss_factor=100,
         cluster_stop_epoch=0,
         hierarchical_loss_factor=1e-3,
         log_tmp_output_every_step=0,
